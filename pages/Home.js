@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, FlatList, Alert } from "react-native";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, FlatList, Alert, TextInput } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 
 // Data awal (Initial State)
@@ -18,6 +18,22 @@ const Home = () => {
     
     // 3. STATE UNTUK JAM DIGITAL
     const [currentTime, setCurrentTime] = useState('Memuat jam...');
+
+    // 4. STATE & REF UNTUK CATATAN (baru)
+    const [note, setNote] = useState("");
+    const noteInputRef = useRef(null); // Membuat "kait" kosong untuk UI
+
+    // 5. OPTIMASI KOMPUTASI DENGAN useMemo
+    const attendanceStats = useMemo(() => {
+        // Teks ini hanya akan tercetak di terminal HANYA jika histotyData bertambah,
+        // Bukan setiap detik saat jam berubah.
+        console.log("Menghitung ulang statistik kehadiran...");
+
+        const presentCount = historyData.filter(item => item.status === "Present").length;
+        const absentCount = historyData.filter(item => item.status === "Absent").length;
+
+        return { totalPresent: presentCount, totalAbsent: absentCount };
+    }, [historyData]); // <-- Dependencies: Hanya gitung ulang kalau 'historyData' berubah
     
     // ... (Lanjut ke Langkah 3)
 
@@ -40,45 +56,46 @@ const Home = () => {
     // FUNGSI LOGIKA ABSEN
     const handleCheckIn = () => {
         if (isCheckedIn) {
-            Alert.alert("Perhatian", "Anda sudah melakukan Check In untuk kelas ini.");
+            Alert.alert("Perhatian", "Anda sudah melakukan Check In.");
+            return;
+        }
+
+        if(note.trim() === "") {
+            Alert.alert("Peringatan", "Catatan kehadiran wajib diisi!");
             return;
         }
         
-        // 1. Buat data presensi baru
         const newAttendance = {
-            id: Date.now().toString(), /// Buat ID unik dari timestamp
+            id: Date.now().toString(),
             course: "Mobile Programming",
-            date: new Date().toLocaleDateString('id-ID'), // Tanggal hari ini
+            date: new Date().toLocaleDateString('id-ID'),
             status: "Present"
         };
         
-        // 2. Masukkan data baru ke urutn paling atas daftar riwayat
         setHistoryData([newAttendance, ...historyData]);
-        
-        // 3. Kunci tombol Check in
         setIsCheckedIn(true);
         Alert.alert("Sukses", `Berhasil Check In pada pukul ${currentTime}`);
     };
     
     const renderItem = ({ item }) => (
-    <View style={styles.item}>
-        <View>
-            <Text style={styles.course}>{item.course}</Text>
-            <Text style={styles.date}>{item.date}</Text>
-        </View>
-        
-        <View style={styles.statusRow}>
-            <MaterialIcons
-            name={item.status === "Present" ? "check-circle" : "cancel"}
-            size={22}
-            color={item.status === "Present" ? "#2ecc71" : "#e74c3c"}
-            />
+        <View style={styles.item}>
+            <View>
+                <Text style={styles.course}>{item.course}</Text>
+                <Text style={styles.date}>{item.date}</Text>
+            </View>
             
-            <Text style={item.status === "Present" ? styles.present : styles.absent}>
-                {item.status}
-            </Text>
+            <View style={styles.statusRow}>
+                <MaterialIcons
+                    name={item.status === "Present" ? "check-circle" : "cancel"}
+                    size={22}
+                    color={item.status === "Present" ? "#2ecc71" : "#e74c3c"}
+                />
+                
+                <Text style={item.status === "Present" ? styles.present : styles.absent}>
+                    {item.status}
+                </Text>
+            </View>
         </View>
-    </View>
     );
 
   return (
@@ -97,15 +114,27 @@ const Home = () => {
           <View>
             <Text style={styles.name}>Vebriana Dela Rosanti</Text>
             <Text>NIM : 0320240080</Text>
-            <Text>Class : Informatika-2A</Text>
+            <Text>Class : Informatika - 2A</Text>
           </View>
         </View>
 
+        {/* Today's Class */}
         <View style={styles.classCard}>
           <Text style={styles.subtitle}>Today's Class</Text>
           <Text>Mobile Programming</Text>
           <Text>08:00 - 10:00</Text>
           <Text>Lab 3</Text>
+
+          {/* Fitur Baru: Kolom Input Catatan dengan useRef */}
+          {!isCheckedIn && (
+            <TextInput
+              ref={noteInputRef} // <-- Menempelkan referensi ke elemen ini
+              style={styles.inputCatatan}
+              placeholder="Tulis catatan (cth: Hadir lab)"
+              value={note}
+              onChangeText={setNote}
+            />
+          )}
 
           <TouchableOpacity
             style={[styles.button, isCheckedIn ? styles.buttonDisabled : styles.buttonActive]}
@@ -118,11 +147,24 @@ const Home = () => {
           </TouchableOpacity>
         </View>
 
+        {/* Fitur Baru: Statistik Kehadiran (Hasil useMemo) */}
+        <View style={styles.statsCard}>
+          <View style={styles.statBox}>
+            <Text style={styles.statNumber}>{attendanceStats.totalPresent}</Text>
+            <Text style={styles.statLabel}>Total Present</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={[styles.statNumber, { color: 'red' }]}>{attendanceStats.totalAbsent}</Text>
+            <Text style={styles.statLabel}>Total Absent</Text>
+          </View>
+        </View>
+
+        {/* Attendance History */}
         <View style={styles.classCard}>
           <Text style={styles.subtitle}>Attendance History</Text>
 
           <FlatList
-            data={historyData}
+            data={historyData} // <-- Ubah 'history' menjadi 'historyData'
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
             scrollEnabled={false}
@@ -255,7 +297,37 @@ const styles = StyleSheet.create({
     color: "#e74c3c",
     marginLeft: 6,
     fontWeight: "bold"
-  }
+  },
+
+  // agar kolom input dan kotak statistiknya terlihat rapi dan selaras dengan desain
+inputCatatan: {
+  borderWidth: 1,
+  borderColor: '#ccc',
+  borderRadius: 8,
+  padding: 10,
+  marginTop: 15,
+  backgroundColor: '#fafafa',
+},
+statsCard: {
+  flexDirection: 'row',
+  justifyContent: 'space-around',
+  backgroundColor: 'white',
+  padding: 15,
+  borderRadius: 10,
+  marginBottom: 20,
+},
+statBox: {
+  alignItems: 'center',
+},
+statNumber: {
+  fontSize: 24,
+  fontWeight: 'bold',
+  color: 'green',
+},
+statLabel: {
+  fontSize: 14,
+  color: 'gray',
+},
 });
 
 export default Home;
